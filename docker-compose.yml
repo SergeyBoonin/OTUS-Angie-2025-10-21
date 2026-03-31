@@ -1,0 +1,83 @@
+version: '3'
+
+services:
+  db:
+    image: mysql:8.0
+    container_name: db
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - MYSQL_DATABASE=wordpress
+    volumes:
+      - dbdata:/var/lib/mysql
+    command: '--default-authentication-plugin=mysql_native_password'
+    networks:
+      - app-network
+
+  wordpress:
+    depends_on:
+      - db
+    image: wordpress:6.0.1-php8.0-fpm-alpine
+    container_name: wordpress
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - WORDPRESS_DB_HOST=db:3306
+      - WORDPRESS_DB_USER=$MYSQL_USER
+      - WORDPRESS_DB_PASSWORD=$MYSQL_PASSWORD
+      - WORDPRESS_DB_NAME=wordpress
+    volumes:
+      - wordpress:/var/www/html
+    networks:
+      - app-network
+
+  webserver:
+    depends_on:
+      - wordpress
+      - fail2ban
+    image: docker.angie.software/angie:templated
+    container_name: webserver
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - ANGIE_ERROR_LOG_SEVERITY=info
+      - ANGIE_LOAD_MODULES=zstd
+    volumes:
+      - wordpress:/var/www/html
+      - ./angie/http.d:/etc/angie/http.d:ro
+      - ./angie/ssl:/etc/angie/ssl:ro
+      - /var/log/angie:/var/log/angie
+    networks:
+      - app-network
+
+  fail2ban:
+    image: crazymax/fail2ban:latest
+    container_name: fail2ban
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    volumes:
+      - /var/log/angie:/var/log/nginx:ro  # Mount the host's log directory (read-only)
+      - fail2ban:/data # Persist Fail2Ban data
+    environment: # Or use an env_file
+      TZ: "UTC" # Set your timezone
+      F2B_BANTIME:  60 #86400 # Ban for 24h
+      F2B_MAXRETRY:  3
+      F2B_FINDTIME: 10 #600 # 10 minutes
+      # Add other jails here
+      F2B_JAILS: "nginx-http-auth"
+      F2B_NGINX_HTTP_AUTH_ENABLED: "true"
+      F2B_NGINX_HTTP_AUTH_LOGPATH: "/var/log/angie/error.log"
+
+
+volumes:
+  wordpress:
+  dbdata:
+  fail2ban:
+
+networks:
+  app-network:
+    driver: bridge
