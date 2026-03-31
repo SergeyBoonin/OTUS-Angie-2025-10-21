@@ -60,7 +60,7 @@ services:
       - NET_ADMIN
       - NET_RAW
     volumes:
-      - /var/log/angie:/var/log/nginx:ro  # Mount the host's log directory (read-only)
+      - /var/log:/var/log:ro  # Mount the host's log directory (read-only)
       - fail2ban:/data # Persist Fail2Ban data
     environment: # Or use an env_file
       TZ: "UTC" # Set your timezone
